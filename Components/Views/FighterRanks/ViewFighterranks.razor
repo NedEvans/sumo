@@ -22,41 +22,58 @@
 else
 {
     <QuickGrid Items="filteredFighterRanks" Class="table">
-        <PropertyColumn Property="fr => fr.Fighter.Name" Title="Fighter">
-            <HeaderTemplate>
-                <input type="search"
-                       value="@filterFighter"
-                       @oninput="e => { filterFighter = e.Value?.ToString() ?? string.Empty; ApplyFilters(); }"
-                       class="form-control form-control-sm"
-                       placeholder="Filter Fighter" />
-            </HeaderTemplate>
+        <!-- Fighter (with filter) -->
+        <PropertyColumn Property="fr => fr.Fighter.Name" Title="Fighter" Sortable="true">
+            <ColumnOptions>
+                <div class="p-2">
+                    <label class="form-label">Filter Fighter</label>
+                    <input type="search"
+                           class="form-control form-control-sm"
+                           placeholder="Type to filter…"
+                           value="@filterFighter"
+                           @oninput="OnFilterFighter" />
+                </div>
+            </ColumnOptions>
         </PropertyColumn>
 
-        <PropertyColumn Property="fr => fr.Event.Location" Title="Event">
-            <HeaderTemplate>
-                <input type="search"
-                       value="@filterEvent"
-                       @oninput="e => { filterEvent = e.Value?.ToString() ?? string.Empty; ApplyFilters(); }"
-                       class="form-control form-control-sm"
-                       placeholder="Filter Event" />
-            </HeaderTemplate>
-        </PropertyColumn>
-        <PropertyColumn Property="f => f.Event.Date" Format="MMM-yy" Title="Date" Sortable="true"/>
-        <PropertyColumn Property="fr => fr.Rank.Name" Title="Rank">
-            <HeaderTemplate>
-                <input type="search"
-                       value="@filterRank"
-                       @oninput="e => { filterRank = e.Value?.ToString() ?? string.Empty; ApplyFilters(); }"
-                       class="form-control form-control-sm"
-                       placeholder="Filter Rank" />
-            </HeaderTemplate>
+        <!-- Event location (with filter) -->
+        <PropertyColumn Property="fr => fr.Event.Location" Title="Event" Sortable="true">
+            <ColumnOptions>
+                <div class="p-2">
+                    <label class="form-label">Filter Event</label>
+                    <input type="search"
+                           class="form-control form-control-sm"
+                           placeholder="Type to filter…"
+                           value="@filterEvent"
+                           @oninput="OnFilterEvent" />
+                </div>
+            </ColumnOptions>
         </PropertyColumn>
 
+        <!-- Event date -->
+        <PropertyColumn Property="fr => fr.Event.Date" Title="Date" Format="MMM-yy" Sortable="true" />
+
+        <!-- Rank (with filter) -->
+        <PropertyColumn Property="fr => fr.Rank.Name" Title="Rank" Sortable="true">
+            <ColumnOptions>
+                <div class="p-2">
+                    <label class="form-label">Filter Rank</label>
+                    <input type="search"
+                           class="form-control form-control-sm"
+                           placeholder="Type to filter…"
+                           value="@filterRank"
+                           @oninput="OnFilterRank" />
+                </div>
+            </ColumnOptions>
+        </PropertyColumn>
+
+        <!-- Weight -->
         <PropertyColumn Property="fr => fr.Weight" Title="Weight" Sortable="true" />
 
+        <!-- Actions -->
         <TemplateColumn Context="fr">
             <a href="fighterranks/add/@fr.Id" class="btn btn-outline-primary btn-sm me-1">Edit</a> |
-            <button type="button" class="btn btn-outline-danger btn-sm me-1"
+            <button type="button" class="btn btn-outline-danger btn-sm ms-1"
                     @onclick="() => DeleteFighterRank(fr.Id)" disabled="@saving">
                 Delete
             </button>
@@ -112,13 +129,14 @@ else
         var filtered = fighterRanks
             .AsEnumerable()
             .Where(fr =>
-                (string.IsNullOrEmpty(filterFighter) || fr.Fighter.Name.Contains(filterFighter, StringComparison.OrdinalIgnoreCase)) &&
-                (string.IsNullOrEmpty(filterEvent) || fr.Event.Location.Contains(filterEvent, StringComparison.OrdinalIgnoreCase)) &&
-                (string.IsNullOrEmpty(filterRank) || fr.Rank.Name.Contains(filterRank, StringComparison.OrdinalIgnoreCase))
+                (string.IsNullOrWhiteSpace(filterFighter) || fr.Fighter.Name.Contains(filterFighter, StringComparison.OrdinalIgnoreCase)) &&
+                (string.IsNullOrWhiteSpace(filterEvent)   || fr.Event.Location.Contains(filterEvent,   StringComparison.OrdinalIgnoreCase)) &&
+                (string.IsNullOrWhiteSpace(filterRank)    || fr.Rank.Name.Contains(filterRank,        StringComparison.OrdinalIgnoreCase))
             )
             .ToList();
 
         filteredFighterRanks = filtered.AsQueryable();
+        StateHasChanged();
     }
 
     private async Task DeleteFighterRank(int id)
@@ -148,4 +166,9 @@ else
             saving = false;
         }
     }
+
+    // Filter handlers (mirror fights page pattern)
+    private void OnFilterFighter(ChangeEventArgs e) { filterFighter = e.Value?.ToString() ?? string.Empty; ApplyFilters(); }
+    private void OnFilterEvent(ChangeEventArgs e)   { filterEvent   = e.Value?.ToString() ?? string.Empty; ApplyFilters(); }
+    private void OnFilterRank(ChangeEventArgs e)    { filterRank    = e.Value?.ToString() ?? string.Empty; ApplyFilters(); }
 }

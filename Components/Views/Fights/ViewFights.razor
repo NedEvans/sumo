@@ -9,10 +9,32 @@
 
 <h3>Fights</h3>
 
-<div class="mb-3">
+<div class="mb-3 d-flex align-items-center gap-3">
     <a href="fights/add" class="btn btn-primary">
         <i class="bi bi-plus-circle"></i> Add New Fight
     </a>
+
+    <!-- Filters aligned to the right of the Add button -->
+    <div class="ms-auto d-flex align-items-center gap-2">
+        <label class="form-label mb-0 me-1">Event</label>
+        <select class="form-select form-select-sm" value="@selectedEventIdString" @onchange="OnEventChanged" style="min-width: 260px;">
+            <option value="">All events</option>
+            @foreach (var ev in eventsForFilter)
+            {
+                <option value="@ev.Id">@($"{ev.Date:dd-MM-yyyy} - {ev.Location}")</option>
+            }
+        </select>
+
+        <label class="form-label mb-0 ms-3 me-1">Day</label>
+        <input type="number"
+               min="1" max="15"
+               class="form-control form-control-sm"
+               style="width: 90px"
+               value="@selectedDayString"
+               @oninput="OnDayChanged" />
+
+        <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="ClearEventDay">Clear</button>
+    </div>
 </div>
 
 @if (loading)
@@ -99,14 +121,24 @@ else
     private IQueryable<Fight> fights = Enumerable.Empty<Fight>().AsQueryable();
     private IQueryable<Fight> filteredFights = Enumerable.Empty<Fight>().AsQueryable();
 
+    // text filters
     private string filterEast = string.Empty;
     private string filterWest = string.Empty;
     private string filterWinner = string.Empty;
     private string filterMethod = string.Empty;
 
+    // new: Event + Day filters
+    private List<Event> eventsForFilter = new();
+    private int? selectedEventId;
+    private int? selectedDay;
+
     private bool loading = true;
     private bool saving = false;
     private string errorMessage = string.Empty;
+
+    // helpers for value= on inputs
+    private string selectedEventIdString => selectedEventId?.ToString() ?? string.Empty;
+    private string selectedDayString => selectedDay?.ToString() ?? string.Empty;
 
     protected override async Task OnInitializedAsync()
     {
@@ -128,6 +160,30 @@ else
                 .ToListAsync();
 
             fights = list.AsQueryable();
+
+            // populate events that actually have fights, newest first
+            eventsForFilter = list
+                .Select(f => f.Event)
+                .DistinctBy(e => e.Id)
+                .OrderByDescending(e => e.Date)
+                .ToList();
+
+            // preload: most recent event WITH fights
+            if (eventsForFilter.Count > 0)
+            {
+                var mostRecentEvent = eventsForFilter.First();
+                selectedEventId = mostRecentEvent.Id;
+
+                // preload day: lowest day in that event that has a fight
+                var minDay = list
+                    .Where(f => f.EventId == selectedEventId)
+                    .Select(f => f.DayInEvent)
+                    .DefaultIfEmpty()
+                    .Min();
+
+                selectedDay = (minDay > 0) ? minDay : null;
+            }
+
             ApplyFilters();
         }
         finally
@@ -138,13 +194,16 @@ else
 
     private void ApplyFilters()
     {
-        // Client-side filtering on the in-memory list so we can use case-insensitive Contains
         var filtered = fights
             .AsEnumerable()
             .Where(f =>
-                (string.IsNullOrWhiteSpace(filterEast)   || f.FighterEast.Name.Contains(filterEast, StringComparison.OrdinalIgnoreCase)) &&
-                (string.IsNullOrWhiteSpace(filterWest)   || f.FighterWest.Name.Contains(filterWest, StringComparison.OrdinalIgnoreCase)) &&
-                (string.IsNullOrWhiteSpace(filterWinner) || f.Winner.Name.Contains(filterWinner, StringComparison.OrdinalIgnoreCase)) &&
+                // event/day filters first
+                (!selectedEventId.HasValue || f.EventId == selectedEventId.Value) &&
+                (!selectedDay.HasValue     || f.DayInEvent == selectedDay.Value) &&
+                // text filters
+                (string.IsNullOrWhiteSpace(filterEast)   || f.FighterEast.Name.Contains(filterEast,   StringComparison.OrdinalIgnoreCase)) &&
+                (string.IsNullOrWhiteSpace(filterWest)   || f.FighterWest.Name.Contains(filterWest,   StringComparison.OrdinalIgnoreCase)) &&
+                (string.IsNullOrWhiteSpace(filterWinner) || f.Winner.Name.Contains(filterWinner,       StringComparison.OrdinalIgnoreCase)) &&
                 (string.IsNullOrWhiteSpace(filterMethod) || f.Method.NameJapanese.Contains(filterMethod, StringComparison.OrdinalIgnoreCase))
             )
             .ToList();
@@ -181,9 +240,48 @@ else
         }
     }
 
-    // Input handlers (avoid @bind:event to prevent the invalid attribute runtime error)
-    private void OnFilterEast(ChangeEventArgs e)    { filterEast   = e.Value?.ToString() ?? string.Empty;   ApplyFilters(); }
-    private void OnFilterWest(ChangeEventArgs e)    { filterWest   = e.Value?.ToString() ?? string.Empty;   ApplyFilters(); }
-    private void OnFilterWinner(ChangeEventArgs e)  { filterWinner = e.Value?.ToString() ?? string.Empty;   ApplyFilters(); }
-    private void OnFilterMethod(ChangeEventArgs e)  { filterMethod = e.Value?.ToString() ?? string.Empty;   ApplyFilters(); }
+    // --- text filter handlers (no @bind:event to avoid runtime attribute errors) ---
+    private void OnFilterEast(ChangeEventArgs e)    { filterEast   = e.Value?.ToString() ?? string.Empty; ApplyFilters(); }
+    private void OnFilterWest(ChangeEventArgs e)    { filterWest   = e.Value?.ToString() ?? string.Empty; ApplyFilters(); }
+    private void OnFilterWinner(ChangeEventArgs e)  { filterWinner = e.Value?.ToString() ?? string.Empty; ApplyFilters(); }
+    private void OnFilterMethod(ChangeEventArgs e)  { filterMethod = e.Value?.ToString() ?? string.Empty; ApplyFilters(); }
+
+    // --- new event/day handlers ---
+    private void OnEventChanged(ChangeEventArgs e)
+    {
+        var s = e.Value?.ToString();
+        selectedEventId = int.TryParse(s, out var id) ? id : (int?)null;
+
+        // When event changes, default the day to the lowest available for that event
+        if (selectedEventId.HasValue)
+        {
+            var minDay = fights
+                .Where(f => f.EventId == selectedEventId.Value)
+                .Select(f => f.DayInEvent)
+                .DefaultIfEmpty()
+                .Min();
+
+            selectedDay = (minDay > 0) ? minDay : null;
+        }
+        else
+        {
+            selectedDay = null;
+        }
+
+        ApplyFilters();
+    }
+
+    private void OnDayChanged(ChangeEventArgs e)
+    {
+        var s = e.Value?.ToString();
+        selectedDay = int.TryParse(s, out var d) ? d : (int?)null;
+        ApplyFilters();
+    }
+
+    private void ClearEventDay()
+    {
+        selectedEventId = null;
+        selectedDay = null;
+        ApplyFilters();
+    }
 }
