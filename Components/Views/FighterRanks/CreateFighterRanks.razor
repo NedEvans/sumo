@@ -1,0 +1,167 @@
+﻿@page "/fighterranks/add/{Id:int?}"
+@using Microsoft.EntityFrameworkCore
+@using Sumo.Data
+@using Sumo.Models
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+@inject SumoDbContext Db
+
+<PageTitle>@pageTitle</PageTitle>
+
+<h1>@pageTitle</h1>
+
+@if (loading)
+{
+    <p><em>Loading...</em></p>
+}
+else
+{
+    <EditForm Model="@fighterRankModel" OnValidSubmit="@HandleValidSubmit">
+        <DataAnnotationsValidator />
+        <ValidationSummary />
+
+        <div class="mb-3">
+            <label for="fighter" class="form-label">Fighter</label>
+            <InputSelect id="fighter" class="form-control" @bind-Value="fighterRankModel.FighterId">
+                <option value="">-- Select Fighter --</option>
+                @foreach (var f in fighters)
+                {
+                    <option value="@f.Id">@f.Name</option>
+                }
+            </InputSelect>
+            <ValidationMessage For="@(() => fighterRankModel.FighterId)" />
+        </div>
+
+        <div class="mb-3">
+            <label for="event" class="form-label">Event</label>
+            <InputSelect id="event" class="form-control" @bind-Value="fighterRankModel.EventId">
+                <option value="">-- Select Event --</option>
+                @foreach (var e in events)
+                {
+                    <option value="@e.Id">@e.Location (@e.Date.ToString("dd-MM-yyyy"))</option>
+                }
+            </InputSelect>
+            <ValidationMessage For="@(() => fighterRankModel.EventId)" />
+        </div>
+
+        <div class="mb-3">
+            <label for="rank" class="form-label">Rank</label>
+            <InputSelect id="rank" class="form-control" @bind-Value="fighterRankModel.RankId">
+                <option value="">-- Select Rank --</option>
+                @foreach (var r in ranks)
+                {
+                    <option value="@r.Id">@r.Name</option>
+                }
+            </InputSelect>
+            <ValidationMessage For="@(() => fighterRankModel.RankId)" />
+        </div>
+
+        <div class="mb-3">
+            <label for="weight" class="form-label">Weight</label>
+            <InputNumber id="weight" class="form-control" @bind-Value="fighterRankModel.Weight" />
+            <ValidationMessage For="@(() => fighterRankModel.Weight)" />
+        </div>
+
+        <div class="mb-3">
+            <button type="submit" class="btn btn-primary" disabled="@saving">
+                @if (saving)
+                {
+                    <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                    <text> Saving...</text>
+                }
+                else
+                {
+                    <text>@(IsEdit ? "Update" : "Create") Fighter Rank</text>
+                }
+            </button>
+
+            <button type="button" class="btn btn-secondary ms-2" @onclick="@(() => Navigation.NavigateTo("/fighterranks/view"))">
+                Cancel
+            </button>
+        </div>
+    </EditForm>
+}
+
+@if (!string.IsNullOrEmpty(errorMessage))
+{
+    <div class="alert alert-danger mt-3">@errorMessage</div>
+}
+
+@code {
+    [Parameter] public int? Id { get; set; }
+
+    private FighterRank fighterRankModel = new();
+    private List<Fighter> fighters = new();
+    private List<Event> events = new();
+    private List<Rank> ranks = new();
+
+    private bool loading = false;
+    private bool saving = false;
+    private string errorMessage = string.Empty;
+    private string pageTitle = string.Empty;
+
+    private bool IsEdit => Id.HasValue && Id.Value > 0;
+
+    protected override async Task OnInitializedAsync()
+    {
+        pageTitle = IsEdit ? "Edit Fighter Rank" : "Add Fighter Rank";
+
+        fighters = await Db.Fighters.OrderBy(f => f.Name).ToListAsync();
+        events = await Db.Events.OrderByDescending(e => e.Date).ToListAsync();
+        ranks = await Db.Ranks.OrderBy(r => r.HierarchyLevel).ToListAsync();
+
+        if (IsEdit)
+        {
+            await LoadFighterRank();
+        }
+    }
+
+    private async Task LoadFighterRank()
+    {
+        loading = true;
+        try
+        {
+            var existing = await Db.FighterRanks.FindAsync(Id!.Value);
+            if (existing != null)
+            {
+                fighterRankModel = existing;
+            }
+            else
+            {
+                errorMessage = "FighterRank not found.";
+                Navigation.NavigateTo("/fighterranks/view");
+            }
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+
+    private async Task HandleValidSubmit()
+    {
+        saving = true;
+        try
+        {
+            if (IsEdit)
+            {
+                Db.FighterRanks.Update(fighterRankModel);
+            }
+            else
+            {
+                await Db.FighterRanks.AddAsync(fighterRankModel);
+            }
+
+            await Db.SaveChangesAsync();
+            Navigation.NavigateTo("/fighterranks/view");
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error saving fighter rank: {ex.Message}";
+        }
+        finally
+        {
+            saving = false;
+        }
+    }
+}

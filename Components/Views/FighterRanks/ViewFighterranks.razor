@@ -1,0 +1,151 @@
+﻿@page "/fighterranks/view"
+@using Microsoft.AspNetCore.Components.QuickGrid
+@using Microsoft.EntityFrameworkCore
+@using Sumo.Data
+@using Sumo.Models
+@inject SumoDbContext Db
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+
+<h3>Fighter Ranks</h3>
+
+<div class="mb-3">
+    <a href="fighterranks/add" class="btn btn-primary">
+        <i class="bi bi-plus-circle"></i> Add New Fighter Rank
+    </a>
+</div>
+
+@if (loading)
+{
+    <p><em>Loading fighter ranks...</em></p>
+}
+else
+{
+    <QuickGrid Items="filteredFighterRanks" Class="table">
+        <PropertyColumn Property="fr => fr.Fighter.Name" Title="Fighter">
+            <HeaderTemplate>
+                <input type="search"
+                       value="@filterFighter"
+                       @oninput="e => { filterFighter = e.Value?.ToString() ?? string.Empty; ApplyFilters(); }"
+                       class="form-control form-control-sm"
+                       placeholder="Filter Fighter" />
+            </HeaderTemplate>
+        </PropertyColumn>
+
+        <PropertyColumn Property="fr => fr.Event.Location" Title="Event">
+            <HeaderTemplate>
+                <input type="search"
+                       value="@filterEvent"
+                       @oninput="e => { filterEvent = e.Value?.ToString() ?? string.Empty; ApplyFilters(); }"
+                       class="form-control form-control-sm"
+                       placeholder="Filter Event" />
+            </HeaderTemplate>
+        </PropertyColumn>
+        <PropertyColumn Property="f => f.Event.Date" Format="MMM-yy" Title="Date" Sortable="true"/>
+        <PropertyColumn Property="fr => fr.Rank.Name" Title="Rank">
+            <HeaderTemplate>
+                <input type="search"
+                       value="@filterRank"
+                       @oninput="e => { filterRank = e.Value?.ToString() ?? string.Empty; ApplyFilters(); }"
+                       class="form-control form-control-sm"
+                       placeholder="Filter Rank" />
+            </HeaderTemplate>
+        </PropertyColumn>
+
+        <PropertyColumn Property="fr => fr.Weight" Title="Weight" Sortable="true" />
+
+        <TemplateColumn Context="fr">
+            <a href="fighterranks/add/@fr.Id" class="btn btn-outline-primary btn-sm me-1">Edit</a> |
+            <button type="button" class="btn btn-outline-danger btn-sm me-1"
+                    @onclick="() => DeleteFighterRank(fr.Id)" disabled="@saving">
+                Delete
+            </button>
+        </TemplateColumn>
+    </QuickGrid>
+}
+
+@if (!string.IsNullOrEmpty(errorMessage))
+{
+    <div class="alert alert-danger mt-3">@errorMessage</div>
+}
+
+@code {
+    private IQueryable<FighterRank> fighterRanks = Enumerable.Empty<FighterRank>().AsQueryable();
+    private IQueryable<FighterRank> filteredFighterRanks = Enumerable.Empty<FighterRank>().AsQueryable();
+
+    private string filterFighter = string.Empty;
+    private string filterEvent = string.Empty;
+    private string filterRank = string.Empty;
+
+    private bool loading = true;
+    private bool saving = false;
+    private string errorMessage = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadFighterRanks();
+    }
+
+    private async Task LoadFighterRanks()
+    {
+        loading = true;
+        try
+        {
+            var list = await Db.FighterRanks
+                .Include(fr => fr.Fighter)
+                .Include(fr => fr.Event)
+                .Include(fr => fr.Rank)
+                .OrderByDescending(fr => fr.Id)
+                .ToListAsync();
+
+            fighterRanks = list.AsQueryable();
+            ApplyFilters();
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+
+    private void ApplyFilters()
+    {
+        var filtered = fighterRanks
+            .AsEnumerable()
+            .Where(fr =>
+                (string.IsNullOrEmpty(filterFighter) || fr.Fighter.Name.Contains(filterFighter, StringComparison.OrdinalIgnoreCase)) &&
+                (string.IsNullOrEmpty(filterEvent) || fr.Event.Location.Contains(filterEvent, StringComparison.OrdinalIgnoreCase)) &&
+                (string.IsNullOrEmpty(filterRank) || fr.Rank.Name.Contains(filterRank, StringComparison.OrdinalIgnoreCase))
+            )
+            .ToList();
+
+        filteredFighterRanks = filtered.AsQueryable();
+    }
+
+    private async Task DeleteFighterRank(int id)
+    {
+        var confirm = await JS.InvokeAsync<bool>("confirm", $"Are you sure you want to delete this fighter rank?");
+        if (!confirm) return;
+
+        saving = true;
+        errorMessage = string.Empty;
+
+        try
+        {
+            var fr = await Db.FighterRanks.FindAsync(id);
+            if (fr != null)
+            {
+                Db.FighterRanks.Remove(fr);
+                await Db.SaveChangesAsync();
+                await LoadFighterRanks();
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error deleting fighter rank: {ex.Message}";
+        }
+        finally
+        {
+            saving = false;
+        }
+    }
+}

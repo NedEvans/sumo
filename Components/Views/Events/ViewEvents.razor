@@ -27,7 +27,7 @@ else
 {
     <div class="grid">
         <QuickGrid Items="events" Class="table">
-            <PropertyColumn Property="e => e.Date" Title="Date" Format="dd-mm-yyyy" Sortable="true" />
+            <PropertyColumn Property="e => e.Date" Title="Date" Format="MMM-yy" Sortable="true" />
             <PropertyColumn Property="e => e.Location" Title="Location" Sortable="true" />
             <TemplateColumn Context="e">
                 <a href="events/add/@e.Id" class="btn btn-outline-primary btn-sm me-1">Edit</a> |
