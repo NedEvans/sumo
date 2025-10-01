@@ -15,38 +15,60 @@
     </a>
 </div>
 
-<div class="row mb-3">
-    <div class="col">
-        <InputText @bind-Value="filterEast" class="form-control" placeholder="Filter East fighter..." />
-    </div>
-    <div class="col">
-        <InputText @bind-Value="filterWest" class="form-control" placeholder="Filter West fighter..." />
-    </div>
-    <div class="col">
-        <InputText @bind-Value="filterWinner" class="form-control" placeholder="Filter Winner..." />
-    </div>
-    <div class="col">
-        <InputText @bind-Value="filterMethod" class="form-control" placeholder="Filter Method..." />
-    </div>
-</div>
-
 @if (loading)
 {
     <p><em>Loading fights...</em></p>
-}
-else if (filteredFights == null || !filteredFights.Any())
-{
-    <p>No fights found.</p>
 }
 else
 {
     <QuickGrid Items="filteredFights" Class="table">
         <PropertyColumn Property="f => f.Event.Location" Title="Event" />
         <PropertyColumn Property="f => f.DayInEvent" Title="Day" />
-        <PropertyColumn Property="f => f.FighterEast.Name" Title="East" />
-        <PropertyColumn Property="f => f.FighterWest.Name" Title="West" />
-        <PropertyColumn Property="f => f.Winner.Name" Title="Winner" />
-        <PropertyColumn Property="f => f.Method.Name" Title="Win Method" />
+
+        <TemplateColumn Title="East">
+            <HeaderTemplate>
+                <input type="search"
+                       value="@filterEast"
+                       @oninput="e => { filterEast = e.Value?.ToString() ?? string.Empty; ApplyFilters(); }"
+                       class="form-control form-control-sm"
+                       placeholder="Filter East" />
+            </HeaderTemplate>
+            <ChildContent Context="f">@f.FighterEast.Name</ChildContent>
+        </TemplateColumn>
+
+        <TemplateColumn Title="West">
+            <HeaderTemplate>
+                <input type="search"
+                       value="@filterWest"
+                       @oninput="e => { filterWest = e.Value?.ToString() ?? string.Empty; ApplyFilters(); }"
+                       class="form-control form-control-sm"
+                       placeholder="Filter West" />
+            </HeaderTemplate>
+            <ChildContent Context="f">@f.FighterWest.Name</ChildContent>
+        </TemplateColumn>
+
+        <TemplateColumn Title="Winner">
+            <HeaderTemplate>
+                <input type="search"
+                       value="@filterWinner"
+                       @oninput="e => { filterWinner = e.Value?.ToString() ?? string.Empty; ApplyFilters(); }"
+                       class="form-control form-control-sm"
+                       placeholder="Filter Winner" />
+            </HeaderTemplate>
+            <ChildContent Context="f">@f.Winner.Name</ChildContent>
+        </TemplateColumn>
+
+        <TemplateColumn Title="Method">
+            <HeaderTemplate>
+                <input type="search"
+                       value="@filterMethod"
+                       @oninput="e => { filterMethod = e.Value?.ToString() ?? string.Empty; ApplyFilters(); }"
+                       class="form-control form-control-sm"
+                       placeholder="Filter Method" />
+            </HeaderTemplate>
+            <ChildContent Context="f">@f.Method.NameJapanese</ChildContent>
+        </TemplateColumn>
+
         <TemplateColumn Context="f">
             <a href="fights/add/@f.Id" class="btn btn-outline-primary btn-sm me-1">Edit</a> |
             <button type="button" class="btn btn-outline-danger btn-sm me-1"
@@ -105,12 +127,17 @@ else
 
     private void ApplyFilters()
     {
-        filteredFights = fights.Where(f =>
-            (string.IsNullOrEmpty(filterEast) || f.FighterEast.Name.Contains(filterEast, StringComparison.OrdinalIgnoreCase)) &&
-            (string.IsNullOrEmpty(filterWest) || f.FighterWest.Name.Contains(filterWest, StringComparison.OrdinalIgnoreCase)) &&
-            (string.IsNullOrEmpty(filterWinner) || f.Winner.Name.Contains(filterWinner, StringComparison.OrdinalIgnoreCase)) &&
-            (string.IsNullOrEmpty(filterMethod) || f.Method.Name.Contains(filterMethod, StringComparison.OrdinalIgnoreCase))
-        ).AsQueryable();
+        var filtered = fights
+            .AsEnumerable()
+            .Where(f =>
+                (string.IsNullOrEmpty(filterEast) || f.FighterEast.Name.Contains(filterEast, StringComparison.OrdinalIgnoreCase)) &&
+                (string.IsNullOrEmpty(filterWest) || f.FighterWest.Name.Contains(filterWest, StringComparison.OrdinalIgnoreCase)) &&
+                (string.IsNullOrEmpty(filterWinner) || f.Winner.Name.Contains(filterWinner, StringComparison.OrdinalIgnoreCase)) &&
+                (string.IsNullOrEmpty(filterMethod) || f.Method.NameJapanese.Contains(filterMethod, StringComparison.OrdinalIgnoreCase))
+            )
+            .ToList();
+
+        filteredFights = filtered.AsQueryable();
     }
 
     private async Task DeleteFight(int id)
@@ -139,27 +166,5 @@ else
         {
             saving = false;
         }
-    }
-
-    // Re-apply filters whenever input text changes
-    private string FilterEast
-    {
-        get => filterEast;
-        set { filterEast = value; ApplyFilters(); }
-    }
-    private string FilterWest
-    {
-        get => filterWest;
-        set { filterWest = value; ApplyFilters(); }
-    }
-    private string FilterWinner
-    {
-        get => filterWinner;
-        set { filterWinner = value; ApplyFilters(); }
-    }
-    private string FilterMethod
-    {
-        get => filterMethod;
-        set { filterMethod = value; ApplyFilters(); }
     }
 }
