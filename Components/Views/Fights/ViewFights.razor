@@ -1,0 +1,165 @@
+﻿@page "/fights/view"
+@using Microsoft.AspNetCore.Components.QuickGrid
+@using Microsoft.EntityFrameworkCore
+@using Sumo.Data
+@using Sumo.Models
+@inject SumoDbContext Db
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+
+<h3>Fights</h3>
+
+<div class="mb-3">
+    <a href="fights/add" class="btn btn-primary">
+        <i class="bi bi-plus-circle"></i> Add New Fight
+    </a>
+</div>
+
+<div class="row mb-3">
+    <div class="col">
+        <InputText @bind-Value="filterEast" class="form-control" placeholder="Filter East fighter..." />
+    </div>
+    <div class="col">
+        <InputText @bind-Value="filterWest" class="form-control" placeholder="Filter West fighter..." />
+    </div>
+    <div class="col">
+        <InputText @bind-Value="filterWinner" class="form-control" placeholder="Filter Winner..." />
+    </div>
+    <div class="col">
+        <InputText @bind-Value="filterMethod" class="form-control" placeholder="Filter Method..." />
+    </div>
+</div>
+
+@if (loading)
+{
+    <p><em>Loading fights...</em></p>
+}
+else if (filteredFights == null || !filteredFights.Any())
+{
+    <p>No fights found.</p>
+}
+else
+{
+    <QuickGrid Items="filteredFights" Class="table">
+        <PropertyColumn Property="f => f.Event.Location" Title="Event" />
+        <PropertyColumn Property="f => f.DayInEvent" Title="Day" />
+        <PropertyColumn Property="f => f.FighterEast.Name" Title="East" />
+        <PropertyColumn Property="f => f.FighterWest.Name" Title="West" />
+        <PropertyColumn Property="f => f.Winner.Name" Title="Winner" />
+        <PropertyColumn Property="f => f.Method.Name" Title="Win Method" />
+        <TemplateColumn Context="f">
+            <a href="fights/add/@f.Id" class="btn btn-outline-primary btn-sm me-1">Edit</a> |
+            <button type="button" class="btn btn-outline-danger btn-sm me-1"
+                    @onclick="() => DeleteFight(f.Id)" disabled="@saving">
+                Delete
+            </button>
+        </TemplateColumn>
+    </QuickGrid>
+}
+
+@if (!string.IsNullOrEmpty(errorMessage))
+{
+    <div class="alert alert-danger mt-3">@errorMessage</div>
+}
+
+@code {
+    private IQueryable<Fight> fights = Enumerable.Empty<Fight>().AsQueryable();
+    private IQueryable<Fight> filteredFights = Enumerable.Empty<Fight>().AsQueryable();
+
+    private string filterEast = string.Empty;
+    private string filterWest = string.Empty;
+    private string filterWinner = string.Empty;
+    private string filterMethod = string.Empty;
+
+    private bool loading = true;
+    private bool saving = false;
+    private string errorMessage = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadFights();
+    }
+
+    private async Task LoadFights()
+    {
+        loading = true;
+        try
+        {
+            var list = await Db.Fights
+                .Include(f => f.Event)
+                .Include(f => f.FighterEast)
+                .Include(f => f.FighterWest)
+                .Include(f => f.Winner)
+                .Include(f => f.Method)
+                .OrderByDescending(f => f.Id)
+                .ToListAsync();
+
+            fights = list.AsQueryable();
+            ApplyFilters();
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+
+    private void ApplyFilters()
+    {
+        filteredFights = fights.Where(f =>
+            (string.IsNullOrEmpty(filterEast) || f.FighterEast.Name.Contains(filterEast, StringComparison.OrdinalIgnoreCase)) &&
+            (string.IsNullOrEmpty(filterWest) || f.FighterWest.Name.Contains(filterWest, StringComparison.OrdinalIgnoreCase)) &&
+            (string.IsNullOrEmpty(filterWinner) || f.Winner.Name.Contains(filterWinner, StringComparison.OrdinalIgnoreCase)) &&
+            (string.IsNullOrEmpty(filterMethod) || f.Method.Name.Contains(filterMethod, StringComparison.OrdinalIgnoreCase))
+        ).AsQueryable();
+    }
+
+    private async Task DeleteFight(int id)
+    {
+        var confirm = await JS.InvokeAsync<bool>("confirm", "Are you sure you want to delete this fight?");
+        if (!confirm) return;
+
+        saving = true;
+        errorMessage = string.Empty;
+
+        try
+        {
+            var fight = await Db.Fights.FindAsync(id);
+            if (fight != null)
+            {
+                Db.Fights.Remove(fight);
+                await Db.SaveChangesAsync();
+                await LoadFights();
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error deleting fight: {ex.Message}";
+        }
+        finally
+        {
+            saving = false;
+        }
+    }
+
+    // Re-apply filters whenever input text changes
+    private string FilterEast
+    {
+        get => filterEast;
+        set { filterEast = value; ApplyFilters(); }
+    }
+    private string FilterWest
+    {
+        get => filterWest;
+        set { filterWest = value; ApplyFilters(); }
+    }
+    private string FilterWinner
+    {
+        get => filterWinner;
+        set { filterWinner = value; ApplyFilters(); }
+    }
+    private string FilterMethod
+    {
+        get => filterMethod;
+        set { filterMethod = value; ApplyFilters(); }
+    }
+}

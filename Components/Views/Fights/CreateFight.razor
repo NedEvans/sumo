@@ -1,0 +1,227 @@
+﻿@page "/fights/add/{Id:int?}"
+@using Microsoft.EntityFrameworkCore
+@using Sumo.Data
+@using Sumo.Models
+@inject SumoDbContext Db
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+
+<PageTitle>@pageTitle</PageTitle>
+
+<h1>@pageTitle</h1>
+
+@if (loading)
+{
+    <p><em>Loading...</em></p>
+}
+else
+{
+    <div class="row">
+        <div class="col-md-6">
+            <EditForm Model="@fightModel" OnValidSubmit="@HandleValidSubmit">
+                <DataAnnotationsValidator />
+                <ValidationSummary />
+
+                <div class="mb-3">
+                    <label class="form-label">Event</label>
+                    <InputSelect @bind-Value="fightModel.EventId" class="form-control">
+                        <option value="">-- Select Event --</option>
+                        @foreach (var ev in events)
+                        {
+                            <option value="@ev.Id">@($"{ev.Date:dd-MM-yyyy} - {ev.Location}")</option>
+                        }
+                    </InputSelect>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Day in Event</label>
+                    <InputNumber @bind-Value="fightModel.DayInEvent" class="form-control" />
+                    <ValidationMessage For="@(() => fightModel.DayInEvent)" />
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Fighter East</label>
+                    <InputSelect @bind-Value="fightModel.FighterEastId" class="form-control">
+                        <option value="">-- Select Fighter East --</option>
+                        @foreach (var f in fighters)
+                        {
+                            <option value="@f.Id">@f.Name</option>
+                        }
+                    </InputSelect>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Fighter West</label>
+                    <InputSelect @bind-Value="fightModel.FighterWestId" class="form-control">
+                        <option value="">-- Select Fighter West --</option>
+                        @foreach (var f in fighters)
+                        {
+                            <option value="@f.Id">@f.Name</option>
+                        }
+                    </InputSelect>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Winner</label>
+                    <InputSelect @bind-Value="fightModel.WinnerId" class="form-control">
+                        <option value="">-- Select Winner --</option>
+                        @foreach (var f in fighters)
+                        {
+                            <option value="@f.Id">@f.Name</option>
+                        }
+                    </InputSelect>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Win Method</label>
+                    <InputSelect @bind-Value="fightModel.WinMethodId" class="form-control">
+                        <option value="">-- Select Win Method --</option>
+                        @foreach (var m in methods)
+                        {
+                            <option value="@m.Id">@($"{m.Name} ({m.NameJapanese})")</option>
+                        }
+                    </InputSelect>
+                </div>
+
+                <div class="mb-3">
+                    <button type="submit" class="btn btn-primary" disabled="@saving">
+                        @if (saving)
+                        {
+                            <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                            <text> Saving...</text>
+                        }
+                        else
+                        {
+                            <text>@(IsEdit ? "Update Fight" : "Create Fight")</text>
+                        }
+                    </button>
+
+                    <button type="button" class="btn btn-secondary ms-2"
+                            @onclick="@(() => Navigation.NavigateTo("/fights/view"))">
+                        Cancel
+                    </button>
+
+                    @if (IsEdit)
+                    {
+                        <button type="button" class="btn btn-danger ms-2" @onclick="DeleteFight" disabled="@saving">
+                            Delete
+                        </button>
+                    }
+                </div>
+            </EditForm>
+        </div>
+    </div>
+}
+
+@if (!string.IsNullOrEmpty(errorMessage))
+{
+    <div class="alert alert-danger mt-3">@errorMessage</div>
+}
+
+@code {
+    [Parameter] public int? Id { get; set; }
+
+    private Fight fightModel = new();
+    private List<Event> events = new();
+    private List<Fighter> fighters = new();
+    private List<WinMethod> methods = new();
+
+    private bool loading = false;
+    private bool saving = false;
+    private string errorMessage = string.Empty;
+    private string pageTitle = string.Empty;
+
+    private bool IsEdit => Id.HasValue && Id.Value > 0;
+
+    protected override async Task OnInitializedAsync()
+    {
+        pageTitle = IsEdit ? "Edit Fight" : "Add New Fight";
+        loading = true;
+
+        try
+        {
+            events = await Db.Events.OrderByDescending(e => e.Date).ToListAsync();
+            fighters = await Db.Fighters.Where(f => f.Active).OrderBy(f => f.Name).ToListAsync();
+            methods = await Db.WinMethods.Where(m => m.IsActive).OrderBy(m => m.Name).ToListAsync();
+
+            if (IsEdit)
+            {
+                var existingFight = await Db.Fights.FindAsync(Id!.Value);
+                if (existingFight != null)
+                {
+                    fightModel = existingFight;
+                }
+                else
+                {
+                    errorMessage = "Fight not found.";
+                    Navigation.NavigateTo("/fights/view");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error loading form: {ex.Message}";
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+
+    private async Task HandleValidSubmit()
+    {
+        saving = true;
+        errorMessage = string.Empty;
+
+        try
+        {
+            if (IsEdit)
+            {
+                Db.Fights.Update(fightModel);
+            }
+            else
+            {
+                await Db.Fights.AddAsync(fightModel);
+            }
+
+            await Db.SaveChangesAsync();
+            Navigation.NavigateTo("/fights/view");
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error saving fight: {ex.Message}";
+        }
+        finally
+        {
+            saving = false;
+        }
+    }
+
+    private async Task DeleteFight()
+    {
+        var confirm = await JS.InvokeAsync<bool>("confirm", "Are you sure you want to delete this fight?");
+        if (!confirm) return;
+
+        saving = true;
+        errorMessage = string.Empty;
+
+        try
+        {
+            var fight = await Db.Fights.FindAsync(Id!.Value);
+            if (fight != null)
+            {
+                Db.Fights.Remove(fight);
+                await Db.SaveChangesAsync();
+                Navigation.NavigateTo("/fights/view");
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error deleting fight: {ex.Message}";
+        }
+        finally
+        {
+            saving = false;
+        }
+    }
+}

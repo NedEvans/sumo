@@ -1,0 +1,142 @@
+﻿@page "/fighters/view"
+@using Microsoft.AspNetCore.Components.QuickGrid
+@using Microsoft.EntityFrameworkCore
+@using Sumo.Data
+@using Sumo.Models
+@inject SumoDbContext Db
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+
+<h3>Fighters</h3>
+
+<div class="mb-3 d-flex align-items-center">
+    <a href="fighters/add" class="btn btn-primary me-3">
+        <i class="bi bi-plus-circle"></i> Add New Fighter
+    </a>
+
+    <div class="form-check form-switch">
+        <input class="form-check-input" type="checkbox" id="activeToggle"
+               checked="@showActiveOnly"
+               @onchange="HandleToggle"/>
+        <label class="form-check-label" for="activeToggle">
+            @toggleText
+        </label>
+    </div>
+</div>
+
+@if (loading)
+{
+    <p><em>Data is loading...</em></p>
+}
+else if (fighters == null || !fighters.Any())
+{
+    <p>No fighters found.</p>
+}
+else
+{
+    <QuickGrid Items="fighters" Class="table">
+        <PropertyColumn Property="f => f.Name" Title="Name" Sortable="true" />
+        <PropertyColumn Property="f => f.Birthdate" Title="Birthdate" Format="dd-MM-yyyy" Sortable="true" />
+        <PropertyColumn Property="f => f.Stable" Title="Stable" Sortable="true" />
+        <TemplateColumn Context="f">
+            <a href="fighters/add/@f.Id" class="btn btn-outline-primary btn-sm me-1">Edit</a> |
+            <button type="button" class="btn btn-outline-danger btn-sm me-1"
+                    @onclick="() => DeleteFighter(f.Id)" disabled="@saving">
+                Delete
+            </button>
+        </TemplateColumn>
+    </QuickGrid>
+}
+
+@code {
+    private IQueryable<Fighter> fighters = Enumerable.Empty<Fighter>().AsQueryable();
+    private bool showActiveOnly = true;
+    private bool loading = true;
+    private bool saving = false;
+    private string errorMessage = string.Empty;
+
+    private string toggleText="Active Fighters";
+
+    
+
+    private async Task HandleToggle(ChangeEventArgs e)
+    {
+        showActiveOnly = !showActiveOnly; // flip the flag
+        toggleText = showActiveOnly ? "Active Fighters" : "All Fighters";
+        await LoadFighters();
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadFighters();
+    }
+
+    private async Task LoadFighters()
+    {
+        loading = true;
+        try
+        {
+            var query = Db.Fighters.AsQueryable();
+
+            if (showActiveOnly)
+                query = query.Where(f => f.Active);
+
+            var list = await query
+                .OrderBy(f => f.Name)
+                .ToListAsync();
+
+            fighters = list.AsQueryable();
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+
+private async Task DeleteFighter(int id)
+{
+    var confirm = await JS.InvokeAsync<bool>("confirm", $"Are you sure you want to delete this fighter?");
+    if (!confirm) return;
+
+    saving = true;
+    errorMessage = string.Empty;
+
+    try
+    {
+        var existingFighter = await Db.Fighters
+            .Include(f => f.FightsAsFighterEast)
+            .Include(f => f.FightsAsFighterWest)
+            .Include(f => f.Wins)
+            .FirstOrDefaultAsync(f => f.Id == id);
+
+        if (existingFighter == null)
+        {
+            errorMessage = "Fighter not found.";
+            return;
+        }
+
+        // Check if fighter is referenced in any fights
+        if (existingFighter.FightsAsFighterEast.Any() ||
+            existingFighter.FightsAsFighterWest.Any() ||
+            existingFighter.Wins.Any())
+        {
+            errorMessage = "This fighter is referenced in one or more fights and cannot be deleted.";
+            return;
+        }
+
+        Db.Fighters.Remove(existingFighter);
+        await Db.SaveChangesAsync();
+
+        await LoadFighters();
+    }
+    catch (Exception ex)
+    {
+        errorMessage = $"Error deleting fighter: {ex.Message}";
+    }
+    finally
+    {
+        saving = false;
+    }
+}
+
+}

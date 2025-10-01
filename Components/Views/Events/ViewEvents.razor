@@ -1,0 +1,98 @@
+﻿@page "/events/view"
+@using Microsoft.AspNetCore.Components.QuickGrid
+@using Microsoft.EntityFrameworkCore
+@using Sumo.Data
+@using Sumo.Models
+@inject SumoDbContext Db
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+
+<h3>Events</h3>
+
+<div class="mb-3">
+    <a href="events/add" class="btn btn-primary">
+        <i class="bi bi-plus-circle"></i> Add New Event
+    </a>
+</div>
+
+@if (loading)
+{
+    <p><em>Data is loading...</em></p>
+}
+else if (events == null || !events.Any())
+{
+    <p>No events found.</p>
+}
+else
+{
+    <div class="grid">
+        <QuickGrid Items="events" Class="table">
+            <PropertyColumn Property="e => e.Date" Title="Date" Format="dd-mm-yyyy" Sortable="true" />
+            <PropertyColumn Property="e => e.Location" Title="Location" Sortable="true" />
+            <TemplateColumn Context="e">
+                <a href="events/add/@e.Id" class="btn btn-outline-primary btn-sm me-1">Edit</a> |
+                <btn type="button" class="btn btn-outline-danger btn-sm me-1" @onclick="() => DeleteEvent(e.Id)" disabled="@saving">Delete</btn>
+            </TemplateColumn>
+        </QuickGrid>
+    </div>
+
+}
+@code {
+    private IQueryable<Event> events = Enumerable.Empty<Event>().AsQueryable();
+    public int? Id { get; set; }
+    private bool loading = true;
+    private bool saving = false;
+    private string errorMessage = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadEvents();
+    }
+
+    private async Task LoadEvents()
+    {
+        loading=true;
+
+        try
+        {
+            var list = await Db.Events
+                .OrderByDescending(e => e.Date)
+                .ToListAsync();
+
+            events = list.AsQueryable();
+        }
+        finally
+        {
+            loading = false;
+        } 
+    }
+
+        private async Task DeleteEvent(int Id)
+    {
+        var confirm = await JS.InvokeAsync<bool>("confirm", $"Are you sure you want to delete this event?");
+        if (!confirm) return;
+
+        saving = true;
+        errorMessage = string.Empty;
+
+        try
+        {
+            var existingEvent = await Db.Events.FindAsync(Id);
+            if (existingEvent != null)
+            {
+                Db.Events.Remove(existingEvent);
+                await Db.SaveChangesAsync();
+            }
+
+            await LoadEvents();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error deleting event: {ex.Message}";
+        }
+        finally
+        {
+            saving = false;
+        }
+    }
+}

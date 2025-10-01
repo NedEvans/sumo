@@ -1,0 +1,143 @@
+﻿@page "/events/add/{Id:int?}"
+@using Sumo.Data
+@using Sumo.Models
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+@inject SumoDbContext Db
+
+<PageTitle>@pageTitle</PageTitle>
+
+<h1>@pageTitle</h1>
+
+@if (loading)
+{
+    <p><em>Loading...</em></p>
+}
+else
+{
+    <div class="row">
+        <div class="col-md-6">
+            <EditForm Model="@eventModel" OnValidSubmit="@HandleValidSubmit">
+                <DataAnnotationsValidator />
+                <ValidationSummary />
+
+                <div class="mb-3">
+                    <label for="date" class="form-label">Date</label>
+                    <InputDate id="date" class="form-control" @bind-Value="@eventModel.Date" />
+                    <ValidationMessage For="@(() => eventModel.Date)" />
+                </div>
+
+                <div class="mb-3">
+                    <label for="location" class="form-label">Location</label>
+                    <InputText id="location" class="form-control" @bind-Value="@eventModel.Location" />
+                    <ValidationMessage For="@(() => eventModel.Location)" />
+                </div>
+
+                <div class="mb-3">
+                    <button type="submit" class="btn btn-primary" disabled="@saving">
+                        @if (saving)
+                        {
+                            <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                            <text> Saving...</text>
+                        }
+                        else
+                        {
+                            <text>@(IsEdit ? "Update Event" : "Create Event")</text>
+                        }
+                    </button>
+
+                    <button type="button" class="btn btn-secondary ms-2" @onclick="@(() => Navigation.NavigateTo("/events/view"))">
+                        Cancel
+                    </button>
+                </div>
+            </EditForm>
+        </div>
+    </div>
+}
+
+@if (!string.IsNullOrEmpty(errorMessage))
+{
+    <div class="alert alert-danger mt-3">
+        @errorMessage
+    </div>
+}
+
+@code {
+    [Parameter] public int? Id { get; set; }
+
+    private Event eventModel = new() { Date = DateTime.Today };
+    private bool loading = false;
+    private bool saving = false;
+    private string errorMessage = string.Empty;
+    private string pageTitle = string.Empty;
+
+    private bool IsEdit => Id.HasValue && Id.Value > 0;
+
+    protected override async Task OnInitializedAsync()
+    {
+        pageTitle = IsEdit ? "Edit Event" : "Add New Event";
+
+        if (IsEdit)
+        {
+            await LoadEvent();
+        }
+    }
+
+    private async Task LoadEvent()
+    {
+        loading = true;
+        errorMessage = string.Empty;
+
+        try
+        {
+            var existingEvent = await Db.Events.FindAsync(Id!.Value);
+            if (existingEvent != null)
+            {
+                eventModel = existingEvent;
+            }
+            else
+            {
+                errorMessage = "Event not found.";
+                Navigation.NavigateTo("/events/view");
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error loading event: {ex.Message}";
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+
+    private async Task HandleValidSubmit()
+    {
+        saving = true;
+        errorMessage = string.Empty;
+
+        try
+        {
+            if (IsEdit)
+            {
+                Db.Events.Update(eventModel);
+            }
+            else
+            {
+                await Db.Events.AddAsync(eventModel);
+            }
+
+            await Db.SaveChangesAsync();
+            Navigation.NavigateTo("/events/view");
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error saving event: {ex.Message}";
+        }
+        finally
+        {
+            saving = false;
+        }
+    }
+
+}

@@ -1,0 +1,180 @@
+﻿@page "/fighters/add/{Id:int?}"
+@using Sumo.Data
+@using Sumo.Models
+@inject NavigationManager Navigation
+@inject SumoDbContext Db
+
+<PageTitle>@pageTitle</PageTitle>
+
+<h1>@pageTitle</h1>
+
+@if (loading)
+{
+    <p><em>Loading...</em></p>
+}
+else
+{
+    <div class="row">
+        <div class="col-md-6">
+            <EditForm Model="@fighterModel" OnValidSubmit="@HandleValidSubmit">
+                <DataAnnotationsValidator />
+                <ValidationSummary />
+
+                <div class="mb-3">
+                    <label for="name" class="form-label">Name</label>
+                    <InputText id="name" class="form-control" @bind-Value="@fighterModel.Name" />
+                    <ValidationMessage For="@(() => fighterModel.Name)" />
+                </div>
+
+                <div class="mb-3">
+                    <label for="birthdate" class="form-label">Birthdate</label>
+                    <InputDate id="birthdate" class="form-control" @bind-Value="@fighterModel.Birthdate" />
+                    <ValidationMessage For="@(() => fighterModel.Birthdate)" />
+                </div>
+
+                <div class="mb-3">
+                    <label for="stable" class="form-label">Stable</label>
+                    <InputText id="stable" class="form-control" @bind-Value="@fighterModel.Stable" />
+                    <ValidationMessage For="@(() => fighterModel.Stable)" />
+                </div>
+
+                <div class="form-check mb-3">
+                    <InputCheckbox id="active" class="form-check-input" @bind-Value="@fighterModel.Active" />
+                    <label for="active" class="form-check-label">Active</label>
+                </div>
+
+                <div class="mb-3">
+                    <label for="image" class="form-label">Image</label>
+                    <InputFile id="image" OnChange="HandleImageUpload" />
+                    @if (fighterModel.Image != null)
+                    {
+                        <div class="mt-2">
+                            <img src="@GetImageUrl()" alt="Fighter Image" width="150" />
+                        </div>
+                    }
+                </div>
+
+                <div class="mb-3">
+                    <button type="submit" class="btn btn-primary" disabled="@saving">
+                        @if (saving)
+                        {
+                            <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                            <text> Saving...</text>
+                        }
+                        else
+                        {
+                            <text>@(IsEdit ? "Update Fighter" : "Create Fighter")</text>
+                        }
+                    </button>
+
+                    <button type="button" class="btn btn-secondary ms-2"
+                            @onclick="@(() => Navigation.NavigateTo("/fighters/view"))">
+                        Cancel
+                    </button>
+                </div>
+            </EditForm>
+        </div>
+    </div>
+}
+
+@if (!string.IsNullOrEmpty(errorMessage))
+{
+    <div class="alert alert-danger mt-3">
+        @errorMessage
+    </div>
+}
+
+@code {
+    [Parameter] public int? Id { get; set; }
+
+    private Fighter fighterModel = new() { Birthdate = DateTime.Today };
+    private bool loading = false;
+    private bool saving = false;
+    private string errorMessage = string.Empty;
+    private string pageTitle = string.Empty;
+
+    private bool IsEdit => Id.HasValue && Id.Value > 0;
+
+    protected override async Task OnInitializedAsync()
+    {
+        pageTitle = IsEdit ? "Edit Fighter" : "Add New Fighter";
+
+        if (IsEdit)
+        {
+            await LoadFighter();
+        }
+    }
+
+    private async Task LoadFighter()
+    {
+        loading = true;
+        try
+        {
+            var existingFighter = await Db.Fighters.FindAsync(Id!.Value);
+            if (existingFighter != null)
+            {
+                fighterModel = existingFighter;
+            }
+            else
+            {
+                errorMessage = "Fighter not found.";
+                Navigation.NavigateTo("/fighters/view");
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error loading fighter: {ex.Message}";
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+
+    private async Task HandleValidSubmit()
+    {
+        saving = true;
+        errorMessage = string.Empty;
+
+        try
+        {
+            if (IsEdit)
+            {
+                Db.Fighters.Update(fighterModel);
+            }
+            else
+            {
+                await Db.Fighters.AddAsync(fighterModel);
+            }
+
+            await Db.SaveChangesAsync();
+            Navigation.NavigateTo("/fighters/view");
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error saving fighter: {ex.Message}";
+        }
+        finally
+        {
+            saving = false;
+        }
+    }
+
+    private async Task HandleImageUpload(InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+        if (file != null)
+        {
+            using var stream = new MemoryStream();
+            await file.OpenReadStream().CopyToAsync(stream);
+            fighterModel.Image = stream.ToArray();
+        }
+    }
+
+    private string GetImageUrl()
+    {
+        if (fighterModel.Image == null) return string.Empty;
+        var base64 = Convert.ToBase64String(fighterModel.Image);
+        return $"data:image/png;base64,{base64}";
+    }
+}

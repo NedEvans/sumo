@@ -1,0 +1,151 @@
+﻿@page "/ranks/add/{Id:int?}"
+@using Sumo.Data
+@using Sumo.Models
+@inject NavigationManager Navigation
+@inject SumoDbContext Db
+
+<PageTitle>@pageTitle</PageTitle>
+
+<h1>@pageTitle</h1>
+
+@if (loading)
+{
+    <p><em>Loading...</em></p>
+}
+else
+{
+    <div class="row">
+        <div class="col-md-6">
+            <EditForm Model="@rankModel" OnValidSubmit="@HandleValidSubmit">
+                <DataAnnotationsValidator />
+                <ValidationSummary />
+
+                <div class="mb-3">
+                    <label for="name" class="form-label">Name</label>
+                    <InputText id="name" class="form-control" @bind-Value="@rankModel.Name" />
+                    <ValidationMessage For="@(() => rankModel.Name)" />
+                </div>
+
+                <div class="mb-3">
+                    <label for="hierarchy" class="form-label">Hierarchy Level</label>
+                    <InputNumber id="hierarchy" class="form-control" @bind-Value="@rankModel.HierarchyLevel" />
+                    <ValidationMessage For="@(() => rankModel.HierarchyLevel)" />
+                </div>
+
+                <div class="mb-3">
+                    <label for="description" class="form-label">Description</label>
+                    <InputTextArea id="description" class="form-control" @bind-Value="@rankModel.Description" />
+                    <ValidationMessage For="@(() => rankModel.Description)" />
+                </div>
+
+                <div class="form-check mb-3">
+                    <InputCheckbox id="isActive" class="form-check-input" @bind-Value="@rankModel.IsActive" />
+                    <label for="isActive" class="form-check-label">Active</label>
+                </div>
+
+                <div class="mb-3">
+                    <button type="submit" class="btn btn-primary" disabled="@saving">
+                        @if (saving)
+                        {
+                            <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                            <text> Saving...</text>
+                        }
+                        else
+                        {
+                            <text>@(IsEdit ? "Update Rank" : "Create Rank")</text>
+                        }
+                    </button>
+
+                    <button type="button" class="btn btn-secondary ms-2"
+                            @onclick="@(() => Navigation.NavigateTo("/ranks/view"))">
+                        Cancel
+                    </button>
+                </div>
+            </EditForm>
+        </div>
+    </div>
+}
+
+@if (!string.IsNullOrEmpty(errorMessage))
+{
+    <div class="alert alert-danger mt-3">
+        @errorMessage
+    </div>
+}
+
+@code {
+    [Parameter] public int? Id { get; set; }
+
+    private Rank rankModel = new();
+    private bool loading = false;
+    private bool saving = false;
+    private string errorMessage = string.Empty;
+    private string pageTitle = string.Empty;
+
+    private bool IsEdit => Id.HasValue && Id.Value > 0;
+
+    protected override async Task OnInitializedAsync()
+    {
+        pageTitle = IsEdit ? "Edit Rank" : "Add New Rank";
+
+        if (IsEdit)
+        {
+            await LoadRank();
+        }
+    }
+
+    private async Task LoadRank()
+    {
+        loading = true;
+        try
+        {
+            var existingRank = await Db.Ranks.FindAsync(Id!.Value);
+            if (existingRank != null)
+            {
+                rankModel = existingRank;
+            }
+            else
+            {
+                errorMessage = "Rank not found.";
+                Navigation.NavigateTo("/ranks/view");
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error loading rank: {ex.Message}";
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+
+    private async Task HandleValidSubmit()
+    {
+        saving = true;
+        errorMessage = string.Empty;
+
+        try
+        {
+            if (IsEdit)
+            {
+                Db.Ranks.Update(rankModel);
+            }
+            else
+            {
+                await Db.Ranks.AddAsync(rankModel);
+            }
+
+            await Db.SaveChangesAsync();
+            Navigation.NavigateTo("/ranks/view");
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error saving rank: {ex.Message}";
+        }
+        finally
+        {
+            saving = false;
+        }
+    }
+}

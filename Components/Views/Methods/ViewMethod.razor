@@ -1,0 +1,101 @@
+﻿@page "/winmethods/view"
+@using Microsoft.AspNetCore.Components.QuickGrid
+@using Microsoft.EntityFrameworkCore
+@using Sumo.Data
+@using Sumo.Models
+@inject SumoDbContext Db
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+
+<h3>Win Methods</h3>
+
+<div class="mb-3">
+    <a href="winmethods/add" class="btn btn-primary">
+        <i class="bi bi-plus-circle"></i> Add New Win Method
+    </a>
+</div>
+
+@if (loading)
+{
+    <p><em>Data is loading...</em></p>
+}
+else if (winMethods == null || !winMethods.Any())
+{
+    <p>No win methods found.</p>
+}
+else
+{
+    <div class="grid">
+        <QuickGrid Items="winMethods" Class="table">
+            <PropertyColumn Property="wm => wm.Name" Title="Name (English)" Sortable="true" />
+            <PropertyColumn Property="wm => wm.NameJapanese" Title="Name (Japanese)" Sortable="true" />
+            <PropertyColumn Property="wm => wm.Category" Title="Category" Sortable="true" />
+            <TemplateColumn Context="wm">
+                <a href="winmethods/add/@wm.Id" class="btn btn-outline-primary btn-sm me-1">Edit</a> |
+                <button type="button" class="btn btn-outline-danger btn-sm me-1"
+                        @onclick="() => DeleteWinMethod(wm.Id)" disabled="@saving">
+                    Delete
+                </button>
+            </TemplateColumn>
+        </QuickGrid>
+    </div>
+}
+
+@code {
+    private IQueryable<WinMethod> winMethods = Enumerable.Empty<WinMethod>().AsQueryable();
+    private bool loading = true;
+    private bool saving = false;
+    private string errorMessage = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadWinMethods();
+    }
+
+    private async Task LoadWinMethods()
+    {
+        loading = true;
+        try
+        {
+            var list = await Db.WinMethods
+                .OrderBy(wm => wm.Category)
+                .ThenBy(wm => wm.Name)
+                .ToListAsync();
+
+            winMethods = list.AsQueryable();
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+
+    private async Task DeleteWinMethod(int id)
+    {
+        var confirm = await JS.InvokeAsync<bool>("confirm", $"Are you sure you want to delete this win method?");
+        if (!confirm) return;
+
+        saving = true;
+        errorMessage = string.Empty;
+
+        try
+        {
+            var existingMethod = await Db.WinMethods.FindAsync(id);
+            if (existingMethod != null)
+            {
+                Db.WinMethods.Remove(existingMethod);
+                await Db.SaveChangesAsync();
+            }
+
+            await LoadWinMethods();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error deleting win method: {ex.Message}";
+        }
+        finally
+        {
+            saving = false;
+        }
+    }
+}

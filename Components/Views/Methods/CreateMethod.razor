@@ -1,0 +1,156 @@
+﻿@page "/winmethods/add/{Id:int?}"
+@using Sumo.Data
+@using Sumo.Models
+@inject NavigationManager Navigation
+@inject SumoDbContext Db
+
+<PageTitle>@pageTitle</PageTitle>
+
+<h1>@pageTitle</h1>
+
+@if (loading)
+{
+    <p><em>Loading...</em></p>
+}
+else
+{
+    <div class="row">
+        <div class="col-md-6">
+            <EditForm Model="@winMethodModel" OnValidSubmit="@HandleValidSubmit">
+                <DataAnnotationsValidator />
+                <ValidationSummary />
+
+                <div class="mb-3">
+                    <label for="name" class="form-label">Name (English)</label>
+                    <InputText id="name" class="form-control" @bind-Value="@winMethodModel.Name" />
+                    <ValidationMessage For="@(() => winMethodModel.Name)" />
+                </div>
+
+                <div class="mb-3">
+                    <label for="nameJapanese" class="form-label">Name (Japanese)</label>
+                    <InputText id="nameJapanese" class="form-control" @bind-Value="@winMethodModel.NameJapanese" />
+                    <ValidationMessage For="@(() => winMethodModel.NameJapanese)" />
+                </div>
+
+                <div class="mb-3">
+                    <label for="category" class="form-label">Category</label>
+                    <InputText id="category" class="form-control" @bind-Value="@winMethodModel.Category" />
+                    <ValidationMessage For="@(() => winMethodModel.Category)" />
+                </div>
+
+                <div class="mb-3">
+                    <label for="description" class="form-label">Description</label>
+                    <InputTextArea id="description" class="form-control" @bind-Value="@winMethodModel.Description" />
+                </div>
+
+                <div class="form-check mb-3">
+                    <InputCheckbox id="isActive" class="form-check-input" @bind-Value="@winMethodModel.IsActive" />
+                    <label for="isActive" class="form-check-label">Active</label>
+                </div>
+
+                <div class="mb-3">
+                    <button type="submit" class="btn btn-primary" disabled="@saving">
+                        @if (saving)
+                        {
+                            <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                            <text> Saving...</text>
+                        }
+                        else
+                        {
+                            <text>@(IsEdit ? "Update Win Method" : "Create Win Method")</text>
+                        }
+                    </button>
+
+                    <button type="button" class="btn btn-secondary ms-2"
+                            @onclick="@(() => Navigation.NavigateTo("/winmethods/view"))">
+                        Cancel
+                    </button>
+                </div>
+            </EditForm>
+        </div>
+    </div>
+}
+
+@if (!string.IsNullOrEmpty(errorMessage))
+{
+    <div class="alert alert-danger mt-3">
+        @errorMessage
+    </div>
+}
+
+@code {
+    [Parameter] public int? Id { get; set; }
+
+    private WinMethod winMethodModel = new();
+    private bool loading = false;
+    private bool saving = false;
+    private string errorMessage = string.Empty;
+    private string pageTitle = string.Empty;
+
+    private bool IsEdit => Id.HasValue && Id.Value > 0;
+
+    protected override async Task OnInitializedAsync()
+    {
+        pageTitle = IsEdit ? "Edit Win Method" : "Add New Win Method";
+
+        if (IsEdit)
+        {
+            await LoadWinMethod();
+        }
+    }
+
+    private async Task LoadWinMethod()
+    {
+        loading = true;
+        try
+        {
+            var existingMethod = await Db.WinMethods.FindAsync(Id!.Value);
+            if (existingMethod != null)
+            {
+                winMethodModel = existingMethod;
+            }
+            else
+            {
+                errorMessage = "Win method not found.";
+                Navigation.NavigateTo("/winmethods/view");
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error loading win method: {ex.Message}";
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+
+    private async Task HandleValidSubmit()
+    {
+        saving = true;
+        errorMessage = string.Empty;
+
+        try
+        {
+            if (IsEdit)
+            {
+                Db.WinMethods.Update(winMethodModel);
+            }
+            else
+            {
+                await Db.WinMethods.AddAsync(winMethodModel);
+            }
+
+            await Db.SaveChangesAsync();
+            Navigation.NavigateTo("/winmethods/view");
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error saving win method: {ex.Message}";
+        }
+        finally
+        {
+            saving = false;
+        }
+    }
+}
