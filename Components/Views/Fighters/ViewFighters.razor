@@ -15,48 +15,58 @@
     </a>
 
     <div class="form-check form-switch">
-        <input class="form-check-input" type="checkbox" id="activeToggle"
+        <input class="form-check-input"
+               type="checkbox"
+               id="activeToggle"
                checked="@showActiveOnly"
-               @onchange="ToggleActiveFilter" />
-        <label class="form-check-label" for="activeToggle">
-            @toggleText
+               @onchange="OnToggleActive"/>
+        <label class="form-check-label ms-2" for="activeToggle">
+            @(showActiveOnly ? "Active Fighters" : "All Fighters")
         </label>
     </div>
 </div>
 
 @if (loading)
 {
-    <p><em>Loading fighters...</em></p>
+    <p><em>Data is loading...</em></p>
 }
 else
 {
     <QuickGrid Items="filteredFighters" Class="table">
         <PropertyColumn Property="f => f.Name" Title="Name" Sortable="true">
-            <HeaderTemplate>
-                <input type="search"
-                       value="@filterName"
-                       @oninput="e => { filterName = e.Value?.ToString() ?? string.Empty; ApplyFilters(); }"
-                       class="form-control form-control-sm"
-                       placeholder="Filter Name" />
-            </HeaderTemplate>
+            <ColumnOptions>
+                <div class="p-2">
+                    <label class="form-label">Filter Name</label>
+                    <input type="search"
+                           class="form-control form-control-sm"
+                           placeholder="Type to filter…"
+                           value="@filterName"
+                           @oninput="OnFilterName" />
+                </div>
+            </ColumnOptions>
         </PropertyColumn>
 
-        <PropertyColumn Property="f => f.Birthdate" Title="Birthdate" Format="dd-MMM-yyyy" Sortable="true" />
+        <PropertyColumn Property="f => f.Birthdate" Title="Birthdate" Format="dd-MM-yyyy" Sortable="true" />
 
         <PropertyColumn Property="f => f.Stable" Title="Stable" Sortable="true">
-            <HeaderTemplate>
-                <input type="search"
-                       value="@filterStable"
-                       @oninput="e => { filterStable = e.Value?.ToString() ?? string.Empty; ApplyFilters(); }"
-                       class="form-control form-control-sm"
-                       placeholder="Filter Stable" />
-            </HeaderTemplate>
+            <ColumnOptions>
+                <div class="p-2">
+                    <label class="form-label">Filter Stable</label>
+                    <input type="search"
+                           class="form-control form-control-sm"
+                           placeholder="Type to filter…"
+                           value="@filterStable"
+                           @oninput="OnFilterStable" />
+                </div>
+            </ColumnOptions>
         </PropertyColumn>
 
         <TemplateColumn Context="f">
             <a href="fighters/add/@f.Id" class="btn btn-outline-primary btn-sm me-1">Edit</a> |
-            <button type="button" class="btn btn-outline-danger btn-sm me-1"
-                    @onclick="() => DeleteFighter(f.Id)" disabled="@saving">
+            <button type="button"
+                    class="btn btn-outline-danger btn-sm ms-1"
+                    @onclick="() => DeleteFighter(f.Id)"
+                    disabled="@saving">
                 Delete
             </button>
         </TemplateColumn>
@@ -72,11 +82,9 @@ else
     private IQueryable<Fighter> fighters = Enumerable.Empty<Fighter>().AsQueryable();
     private IQueryable<Fighter> filteredFighters = Enumerable.Empty<Fighter>().AsQueryable();
 
+    private bool showActiveOnly = true;
     private string filterName = string.Empty;
     private string filterStable = string.Empty;
-
-    private bool showActiveOnly = true;
-    private string toggleText = "Active Fighters";
 
     private bool loading = true;
     private bool saving = false;
@@ -93,7 +101,6 @@ else
         try
         {
             var query = Db.Fighters.AsQueryable();
-
             if (showActiveOnly)
                 query = query.Where(f => f.Active);
 
@@ -110,24 +117,18 @@ else
         }
     }
 
-    private void ToggleActiveFilter(ChangeEventArgs e)
-    {
-        showActiveOnly = !showActiveOnly;
-        toggleText = showActiveOnly ? "Active Fighters" : "All Fighters";
-        ApplyFilters();
-    }
-
     private void ApplyFilters()
     {
         var filtered = fighters
             .AsEnumerable()
             .Where(f =>
-                (string.IsNullOrEmpty(filterName) || f.Name.Contains(filterName, StringComparison.OrdinalIgnoreCase)) &&
-                (string.IsNullOrEmpty(filterStable) || f.Stable.Contains(filterStable, StringComparison.OrdinalIgnoreCase))
+                (string.IsNullOrWhiteSpace(filterName)   || f.Name.Contains(filterName, StringComparison.OrdinalIgnoreCase)) &&
+                (string.IsNullOrWhiteSpace(filterStable) || f.Stable.Contains(filterStable, StringComparison.OrdinalIgnoreCase))
             )
             .ToList();
 
         filteredFighters = filtered.AsQueryable();
+        StateHasChanged();
     }
 
     private async Task DeleteFighter(int id)
@@ -156,7 +157,7 @@ else
                 existingFighter.FightsAsFighterWest.Any() ||
                 existingFighter.Wins.Any())
             {
-                errorMessage = "This fighter is referenced in one or more fights and cannot be deleted.";
+                errorMessage = "This fighter is referenced in fights and cannot be deleted.";
                 return;
             }
 
@@ -173,5 +174,24 @@ else
         {
             saving = false;
         }
+    }
+
+    // UI events (no @bind:event anywhere — use @oninput with handlers)
+    private async Task OnToggleActive(ChangeEventArgs _)
+    {
+        showActiveOnly = !showActiveOnly;
+        await LoadFighters();
+    }
+
+    private void OnFilterName(ChangeEventArgs e)
+    {
+        filterName = e.Value?.ToString() ?? string.Empty;
+        ApplyFilters();
+    }
+
+    private void OnFilterStable(ChangeEventArgs e)
+    {
+        filterStable = e.Value?.ToString() ?? string.Empty;
+        ApplyFilters();
     }
 }
